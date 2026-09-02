@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
+  Infinity as InfinityIcon,
   Lightbulb,
   RotateCcw,
   Undo2,
@@ -19,62 +20,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { generatePuzzle, PUZZLE_SIZE } from '@/lib/puzzles';
 
 type CellState = 0 | 1 | 2;
-type Puzzle = { name: string; solution: number[]; regions: number[][] };
+type SavedBoards = Record<number, CellState[]>;
 
-const SIZE = 7;
-const PUZZLES: Puzzle[] = [
-  {
-    name: '晨霧',
-    solution: [1, 3, 5, 0, 2, 4, 6],
-    regions: [
-      [0,0,1,1,1,1,1],[0,0,1,1,1,1,1],[3,3,4,1,1,2,2],
-      [3,3,4,1,1,1,1],[4,4,4,4,5,6,1],[4,4,4,5,5,6,6],[4,4,5,5,6,6,6],
-    ],
-  },
-  {
-    name: '遠丘',
-    solution: [0, 6, 2, 5, 3, 1, 4],
-    regions: [
-      [0,0,0,0,0,2,2],[4,4,2,2,2,2,1],[4,4,2,2,2,2,3],
-      [4,4,4,4,3,3,3],[4,4,4,4,3,3,3],[4,5,6,6,6,3,3],[5,5,6,6,6,3,3],
-    ],
-  },
-  {
-    name: '暖風',
-    solution: [1, 4, 6, 2, 0, 5, 3],
-    regions: [
-      [0,0,1,1,1,1,1],[0,0,1,1,1,1,1],[0,0,3,1,1,1,2],
-      [0,0,3,1,1,1,2],[4,4,3,1,1,1,2],[4,4,6,6,5,5,2],[4,6,6,6,5,5,5],
-    ],
-  },
-  {
-    name: '星野',
-    solution: [3, 6, 1, 4, 2, 0, 5],
-    regions: [
-      [2,0,0,0,0,1,1],[2,0,1,1,1,1,1],[2,2,4,4,1,1,1],
-      [5,4,4,4,3,1,1],[5,4,4,3,3,3,3],[5,4,4,4,3,3,3],[6,6,6,6,6,6,3],
-    ],
-  },
-  {
-    name: '晚霞',
-    solution: [4, 6, 1, 3, 0, 2, 5],
-    regions: [
-      [2,2,2,2,0,0,0],[2,2,3,3,0,0,1],[2,2,2,3,0,0,1],
-      [2,2,2,3,3,0,1],[4,2,2,2,3,6,1],[4,5,5,2,3,6,6],[5,5,5,2,3,6,6],
-    ],
-  },
-];
-
+const SIZE = PUZZLE_SIZE;
+const STORAGE_KEY = 'wildgrid-infinite-progress-v1';
 const emptyBoard = () => Array<CellState>(SIZE * SIZE).fill(0);
-const initialBoards = () => PUZZLES.map(emptyBoard);
 const formatTime = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 
 export default function Home() {
   const [level, setLevel] = useState(0);
-  const [boards, setBoards] = useState<CellState[][]>(initialBoards);
+  const [boards, setBoards] = useState<SavedBoards>({});
   const [history, setHistory] = useState<CellState[][]>([]);
   const [completed, setCompleted] = useState<number[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -82,22 +41,25 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState('每列、每欄、每個牧區各放一頭牛');
 
-  const puzzle = PUZZLES[level];
-  const board = boards[level];
+  const puzzle = useMemo(() => generatePuzzle(level + 1), [level]);
+  const board = boards[level] ?? emptyBoard();
   const bulls = useMemo(
     () => board.flatMap((value, index) => (value === 2 ? [index] : [])),
     [board],
   );
   const conflicts = useMemo(() => {
     const bad = new Set<number>();
-    bulls.forEach((a, i) => {
-      const ar = Math.floor(a / SIZE), ac = a % SIZE;
-      bulls.slice(i + 1).forEach((b) => {
-        const br = Math.floor(b / SIZE), bc = b % SIZE;
-        const sameRegion = puzzle.regions[ar][ac] === puzzle.regions[br][bc];
-        const touching = Math.abs(ar - br) <= 1 && Math.abs(ac - bc) <= 1;
-        if (ar === br || ac === bc || sameRegion || touching) {
-          bad.add(a); bad.add(b);
+    bulls.forEach((a, index) => {
+      const aRow = Math.floor(a / SIZE);
+      const aColumn = a % SIZE;
+      bulls.slice(index + 1).forEach((b) => {
+        const bRow = Math.floor(b / SIZE);
+        const bColumn = b % SIZE;
+        const sameRegion = puzzle.regions[aRow][aColumn] === puzzle.regions[bRow][bColumn];
+        const touching = Math.abs(aRow - bRow) <= 1 && Math.abs(aColumn - bColumn) <= 1;
+        if (aRow === bRow || aColumn === bColumn || sameRegion || touching) {
+          bad.add(a);
+          bad.add(b);
         }
       });
     });
@@ -107,17 +69,19 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('wildgrid-progress') ?? 'null');
-      if (saved?.boards?.length === PUZZLES.length) setBoards(saved.boards);
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+      if (saved?.boards && typeof saved.boards === 'object') setBoards(saved.boards);
       if (Array.isArray(saved?.completed)) setCompleted(saved.completed);
-      if (Number.isInteger(saved?.level)) setLevel(Math.min(saved.level, PUZZLES.length - 1));
-    } catch { /* Ignore damaged local progress. */ }
+      if (Number.isInteger(saved?.level) && saved.level >= 0) setLevel(saved.level);
+    } catch {
+      // A damaged local save should never prevent a new game.
+    }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem('wildgrid-progress', JSON.stringify({ boards, completed, level }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ boards, completed, level }));
   }, [boards, completed, hydrated, level]);
 
   useEffect(() => {
@@ -129,17 +93,16 @@ export default function Home() {
   useEffect(() => {
     if (!solved) return;
     setCompleted((done) => done.includes(level) ? done : [...done, level]);
-    setMessage('太漂亮了！每頭牛都有自己的空間。');
-    if ('vibrate' in navigator) navigator.vibrate?.([40, 30, 70]);
+    setMessage('太漂亮了！這座牧場完成了。');
+    navigator.vibrate?.([40, 30, 70]);
   }, [level, solved]);
 
-  const replaceBoard = useCallback((next: CellState[]) => {
-    setBoards((all) => all.map((item, index) => index === level ? next : item));
+  const replaceBoard = useCallback((next: CellState[], targetLevel = level) => {
+    setBoards((all) => ({ ...all, [targetLevel]: next }));
   }, [level]);
 
   const switchLevel = useCallback((nextLevel: number) => {
-    const safeLevel = (nextLevel + PUZZLES.length) % PUZZLES.length;
-    setLevel(safeLevel);
+    setLevel(Math.max(0, Math.floor(nextLevel)));
     setHistory([]);
     setElapsed(0);
     setStarted(false);
@@ -174,7 +137,9 @@ export default function Home() {
   };
 
   const hint = () => {
-    const row = puzzle.solution.findIndex((column, r) => board[r * SIZE + column] !== 2);
+    const row = puzzle.solution.findIndex(
+      (column, rowIndex) => board[rowIndex * SIZE + column] !== 2,
+    );
     if (row < 0) return;
     const index = row * SIZE + puzzle.solution[row];
     setHistory((past) => [...past, board]);
@@ -187,38 +152,43 @@ export default function Home() {
 
   useEffect(() => {
     const modelContext = (document as Document & {
-      modelContext?: { registerTool: (tool: unknown, options?: { signal: AbortSignal }) => void | Promise<void> };
+      modelContext?: {
+        registerTool: (tool: unknown, options?: { signal: AbortSignal }) => void | Promise<void>;
+      };
     }).modelContext;
     if (!modelContext?.registerTool) return;
     const lifecycle = new AbortController();
     void Promise.resolve(modelContext.registerTool({
       name: 'start_puzzle',
       title: '開始野牛格關卡',
-      description: '切換至指定的野牛格關卡並清空該關卡，level 必須為 1 到 5。',
+      description: '產生並切換至指定編號的唯一解野牛格關卡，level 必須為正整數。',
       inputSchema: {
-        type: 'object', properties: { level: { type: 'integer', minimum: 1, maximum: 5 } },
-        required: ['level'], additionalProperties: false,
+        type: 'object',
+        properties: { level: { type: 'integer', minimum: 1, maximum: 1000000 } },
+        required: ['level'],
+        additionalProperties: false,
       },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute(input: unknown) {
         const requested = (input as { level?: unknown })?.level;
-        if (!Number.isInteger(requested) || Number(requested) < 1 || Number(requested) > 5) {
-          throw new Error('level 必須是 1 到 5 的整數');
+        if (!Number.isInteger(requested) || Number(requested) < 1 || Number(requested) > 1000000) {
+          throw new Error('level 必須是 1 到 1,000,000 的整數');
         }
-        const nextLevel = Number(requested) - 1;
-        setBoards((all) => all.map((item, index) => index === nextLevel ? emptyBoard() : item));
-        switchLevel(nextLevel);
-        return { level: Number(requested), status: 'ready' };
+        const targetLevel = Number(requested) - 1;
+        generatePuzzle(Number(requested));
+        replaceBoard(emptyBoard(), targetLevel);
+        switchLevel(targetLevel);
+        return { level: Number(requested), status: 'ready', unique_solution: true };
       },
     }, { signal: lifecycle.signal })).catch(() => undefined);
     return () => lifecycle.abort();
-  }, [switchLevel]);
+  }, [replaceBoard, switchLevel]);
 
   return (
     <main className="game-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">每日牧場 · {String(level + 1).padStart(2, '0')}</p>
+          <p className="eyebrow">無限牧場 · #{String(level + 1).padStart(4, '0')}</p>
           <h1>野牛格</h1>
         </div>
         <Dialog>
@@ -228,7 +198,7 @@ export default function Home() {
           <DialogContent className="rules-dialog">
             <DialogHeader>
               <DialogTitle>三條簡單規則</DialogTitle>
-              <DialogDescription>不需要猜，每一關都能靠邏輯解開。</DialogDescription>
+              <DialogDescription>每一關由程式產生，並經解題器確認只有一個答案。</DialogDescription>
             </DialogHeader>
             <ol className="rule-list">
               <li><span>1</span><p><b>橫排與直排</b>每一列、每一欄剛好一頭牛。</p></li>
@@ -243,8 +213,8 @@ export default function Home() {
       <section className="game-card" aria-label="野牛格益智遊戲">
         <div className="level-row">
           <div className="level-name-wrap">
-            <Button variant="ghost" size="icon-sm" onClick={() => switchLevel(level - 1)} aria-label="上一關"><ChevronLeft /></Button>
-            <span className="level-pill">{puzzle.name} · 7 × 7</span>
+            <Button variant="ghost" size="icon-sm" onClick={() => switchLevel(level - 1)} disabled={level === 0} aria-label="上一關"><ChevronLeft /></Button>
+            <span className="level-pill">{puzzle.name} · 唯一解</span>
             <Button variant="ghost" size="icon-sm" onClick={() => switchLevel(level + 1)} aria-label="下一關"><ChevronRight /></Button>
           </div>
           <span className="progress-label"><Clock3 /> {formatTime(elapsed)}</span>
@@ -268,7 +238,12 @@ export default function Home() {
                   key={`${level}-${index}`}
                   role="gridcell"
                   className={`cell region-${region} ${conflicts.has(index) ? 'conflict' : ''}`}
-                  style={{ borderTopWidth: border.top ? 3 : 1, borderRightWidth: border.right ? 3 : 1, borderBottomWidth: border.bottom ? 3 : 1, borderLeftWidth: border.left ? 3 : 1 }}
+                  style={{
+                    borderTopWidth: border.top ? 3 : 1,
+                    borderRightWidth: border.right ? 3 : 1,
+                    borderBottomWidth: border.bottom ? 3 : 1,
+                    borderLeftWidth: border.left ? 3 : 1,
+                  }}
                   aria-label={`第 ${row + 1} 列，第 ${column + 1} 欄，${label}`}
                   aria-invalid={conflicts.has(index)}
                   onClick={() => cycleCell(index)}
@@ -291,16 +266,19 @@ export default function Home() {
           <Button variant="outline" onClick={reset} disabled={!board.some(Boolean)}><RotateCcw /> 重來</Button>
         </div>
 
-        <nav className="level-dots" aria-label="選擇關卡">
-          {PUZZLES.map((item, index) => (
-            <button key={item.name} className={`${index === level ? 'active' : ''} ${completed.includes(index) ? 'done' : ''}`} onClick={() => switchLevel(index)} aria-label={`第 ${index + 1} 關：${item.name}`} aria-current={index === level ? 'page' : undefined}>
-              {completed.includes(index) ? '✓' : index + 1}
-            </button>
-          ))}
-        </nav>
+        {solved && (
+          <Button className="next-level-cta" onClick={() => switchLevel(level + 1)}>
+            下一座牧場 <ChevronRight />
+          </Button>
+        )}
+
+        <div className="infinite-status" aria-label="無限關卡進度">
+          <span><InfinityIcon /> 持續生成唯一解關卡</span>
+          <span>已完成 {completed.length} 關</span>
+        </div>
         <p className="tap-help">點一下放記號 · 再點一下放牛 · 第三下清除</p>
       </section>
-      <footer>原創規則實作與美術 · 進度只儲存在這台裝置</footer>
+      <footer>程序生成與唯一解驗證 · 進度只儲存在這台裝置</footer>
     </main>
   );
 }
