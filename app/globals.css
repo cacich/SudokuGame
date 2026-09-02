@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--background); --color-foreground: var(--foreground);
+  --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--card); --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive); --color-border: var(--border);
+  --color-input: var(--input); --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans); --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) * .6); --radius-md: calc(var(--radius) * .8);
+  --radius-lg: var(--radius); --radius-xl: calc(var(--radius) * 1.4);
+}
+:root {
+  --background:#f4f0e5; --foreground:#1e2824; --card:#fffdf6; --card-foreground:#1e2824;
+  --primary:#244e3d; --primary-foreground:#fffdf5; --secondary:#e9e2d1; --secondary-foreground:#293a32;
+  --muted:#e8e3d7; --muted-foreground:#68736c; --accent:#e88a45; --accent-foreground:#1e2824;
+  --destructive:#b94735; --border:#cfc8b8; --input:#cfc8b8; --ring:#e88a45; --radius:.85rem;
+}
+*{box-sizing:border-box} html{background:var(--background)}
+body{margin:0;background:radial-gradient(circle at 50% -10%,rgba(255,255,255,.88),transparent 36rem),var(--background);color:var(--foreground);font-family:var(--font-geist-sans),"Noto Sans TC",sans-serif} button{font:inherit}
+.game-shell{width:min(100%,620px);min-height:100dvh;margin:0 auto;padding:22px 18px 28px}.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:0 2px}.eyebrow{margin:0 0 3px;color:#8c6042;font-size:11px;font-weight:750;letter-spacing:.15em;text-transform:uppercase}h1{margin:0;color:#203f34;font-size:clamp(27px,7vw,38px);font-weight:800;letter-spacing:-.05em}
+.game-card{overflow:hidden;padding:clamp(16px,4vw,26px);border:1px solid rgba(78,72,56,.18);border-radius:25px;background:rgba(255,253,246,.88);box-shadow:0 18px 50px rgba(49,55,43,.09),0 2px 5px rgba(49,55,43,.05);backdrop-filter:blur(10px)}.level-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}.level-name-wrap{display:flex;align-items:center;gap:3px}.level-pill{padding:6px 10px;border-radius:999px;background:#e7e0cd;color:#4c584f;font-size:12px;font-weight:750}.progress-label{display:flex;align-items:center;gap:5px;color:#6d756e;font-size:13px;font-variant-numeric:tabular-nums}.progress-label svg{width:14px}
+.board-wrap{width:100%}.board{display:grid;grid-template-columns:repeat(7,1fr);width:100%;aspect-ratio:1;overflow:hidden;border:2px solid #293c34;border-radius:12px;background:#f5efdf;box-shadow:0 4px 0 #d2c8ae}.cell{position:relative;display:grid;place-items:center;min-width:0;padding:0;border-color:#3b4a42;border-style:solid;background:var(--cell-color);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:filter .12s ease,transform .12s ease}.cell:active{filter:brightness(.91);transform:scale(.92)}.cell:focus-visible{z-index:3;outline:3px solid #ee8e48;outline-offset:-4px}.region-0{--cell-color:#dce9cf}.region-1{--cell-color:#f2ddae}.region-2{--cell-color:#d8e8e3}.region-3{--cell-color:#efc7ae}.region-4{--cell-color:#e4d9ed}.region-5{--cell-color:#cfe2b6}.region-6{--cell-color:#f2d4c0}.note-dot{width:6px;height:6px;border-radius:50%;background:#52625a;box-shadow:0 1px 0 rgba(255,255,255,.7)}.bull-mark{display:grid;place-items:center;width:clamp(27px,8vw,42px);aspect-ratio:1;border:2px solid #1f362d;border-radius:50% 50% 45% 45%;background:#294d3e;color:#fff8e8;font-size:clamp(11px,3.5vw,15px);font-weight:850;box-shadow:inset 0 -3px 0 rgba(0,0,0,.15),0 2px 2px rgba(41,60,51,.18);animation:pop .16s ease-out}.cell.conflict .bull-mark{background:#a94b38;border-color:#713024;animation:shake .18s ease-in-out}@keyframes pop{from{opacity:.2;transform:scale(.55)}}@keyframes shake{25%{transform:translateX(-2px)}75%{transform:translateX(2px)}}
+.game-message{display:block;min-height:43px;margin:17px 0 10px;padding:11px 13px;border-radius:12px;background:#f0ebdf;color:#59635d;font-size:13px;text-align:center}.game-message.success{background:#dcebd5;color:#245139;font-weight:750}.game-message.warning{background:#f3d9d0;color:#843c2e}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.controls button{height:43px;border-color:#c9c1af;background:rgba(255,255,255,.6)}.level-dots{display:flex;justify-content:center;gap:8px;margin-top:17px}.level-dots button{display:grid;place-items:center;width:27px;height:27px;padding:0;border:1px solid #c9c1af;border-radius:50%;background:transparent;color:#7e827d;font-size:11px;font-weight:750;cursor:pointer}.level-dots button.active{border-color:#294d3e;background:#294d3e;color:#fff}.level-dots button.done:not(.active){border-color:#8eaa7a;background:#dce8d3;color:#2b563d}.tap-help{margin:12px 0 0;color:#8a8e88;font-size:11px;text-align:center}footer{padding:18px 4px 0;color:#99988f;font-size:10px;text-align:center}
+.rules-dialog{border:1px solid #d3cbb8;background:#fffdf6;padding:22px}.rules-dialog [data-slot="dialog-title"]{color:#244e3d;font-size:22px;font-weight:800}.rule-list{display:grid;gap:12px;margin:2px 0;padding:0;list-style:none}.rule-list li{display:grid;grid-template-columns:32px 1fr;align-items:start;gap:10px}.rule-list li>span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#e7e0cd;color:#315040;font-weight:800}.rule-list p{margin:3px 0;color:#5f6862;line-height:1.55}.rule-list b{display:block;color:#273b32}.rule-note{margin:0;padding:10px 12px;border-radius:10px;background:#f1ecdf;color:#7b6554;font-size:12px}
+@media(max-width:390px){.game-shell{padding:14px 11px 20px}.topbar{margin-bottom:10px}.game-card{padding:13px;border-radius:20px}.controls button{padding-inline:6px;font-size:12px}.level-pill{padding-inline:7px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Keep every grid track fixed when a bull marker is inserted. */
+.board{grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat(7,minmax(0,1fr))}
+.cell{width:100%;height:100%;min-width:0;min-height:0;overflow:hidden}

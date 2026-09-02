@@ -1,0 +1,11 @@
+{
+  "name": "野牛格 — 牧場邏輯益智遊戲",
+  "short_name": "野牛格",
+  "description": "每列、每欄與每個牧區各安置一頭牛。",
+  "lang": "zh-Hant",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f4f0e5",
+  "theme_color": "#244e3d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
