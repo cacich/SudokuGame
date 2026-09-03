@@ -27,6 +27,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - name: Place static assets at the Pages project root
         run: mv dist/client/SudokuGame/_next dist/client/_next
