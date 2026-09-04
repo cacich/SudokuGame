@@ -1,4 +1,4 @@
-const CACHE = 'wildgrid-double-v3';
+const CACHE = 'wildgrid-auto-v4';
 const ROOT = self.registration.scope;
 const ASSETS = [
   ROOT,

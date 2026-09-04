@@ -634,6 +634,13 @@ footer {
   width: 5px;
   height: 5px;
 }
+.note-dot.auto-note {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+  border: 1px solid #4d5d52;
+  opacity: 0.65;
+}
 .cell.hint-focus {
   box-shadow: inset 0 0 0 2px #3b578c;
 }

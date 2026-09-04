@@ -45,6 +45,7 @@ import { CHAPTERS, chapterFor, chapterImage } from '@/lib/chapters';
 import { CAMPAIGN } from '@/lib/campaign-data';
 import { HARD } from '@/lib/hard-data';
 import { generatePuzzle } from '@/lib/puzzles';
+import { withAutomaticExclusions } from '@/lib/auto-exclusions';
 import {
   conflictsFor,
   isSolved,
@@ -131,6 +132,10 @@ export default function Home() {
     key = keyFor(selection);
   const session = progress.records[key] ?? emptySession(size),
     board = session.board;
+  const visibleBoard = useMemo(
+    () => withAutomaticExclusions(puzzle, board),
+    [puzzle, board],
+  );
   const conflicts = useMemo(() => conflictsFor(puzzle, board), [puzzle, board]);
   const solved = isSolved(puzzle, board);
   const chapterIndex =
@@ -268,6 +273,10 @@ export default function Home() {
   };
   const cycleCell = (index: number) => {
     if (solved || !hydrated) return;
+    if (board[index] === 0 && visibleBoard[index] === 1) {
+      setMessage('這格已自動排除；移除相關的牛後會自動恢復。');
+      return;
+    }
     const next = [...board];
     next[index] = isHard
       ? next[index] === (paint === 'cow' ? 2 : 1)
@@ -316,7 +325,7 @@ export default function Home() {
         focus: [],
         reason: '亮起的這格與唯一解不相容。先清除這個記號或牛，再繼續推理。',
       };
-    else step = nextDeduction(puzzle, board);
+    else step = nextDeduction(puzzle, visibleBoard);
     // Legacy endless puzzles are unique but not necessarily solvable by the supported techniques.
     if (!step && selection.mode === 'endless') {
       const cell = [...correctCells].find((i) => board[i] !== 2);
@@ -614,8 +623,9 @@ export default function Home() {
                     </ol>
                     <p className="rule-note">
                       {isHard
-                        ? '先選「放牛」或「排除」，再點格子；再次點同一格可清除。棋盤可放大並捲動。'
-                        : '點一下放排除記號，再點放牛，第三下清除。'}
+                        ? '先選「放牛」或「排除」，再點格子；再次點同一格可清除。放牛會自動排除周圍八格；每列、每欄或牧區放滿兩隻時，自動排除其餘格。棋盤可放大並捲動。'
+                        : '點一下放排除記號，再點放牛，第三下清除。放牛會自動排除同列、同欄、同牧區與周圍八格。'}{' '}
+                      淡色空心記號是自動排除，移除牛或復原時會跟著更新，不影響手動記號。
                       提示會先說明理由；使用提示仍可解鎖下一題。
                     </p>
                   </DialogContent>
@@ -716,7 +726,8 @@ export default function Home() {
                     aria-label={`${size} 乘 ${size} 牧場棋盤`}
                     style={{ '--size': size } as CSSProperties}
                   >
-                    {board.map((state, index) => {
+                    {visibleBoard.map((state, index) => {
+                      const isAutomatic = board[index] === 0 && state === 1;
                       const row = Math.floor(index / size),
                         col = index % size,
                         region = puzzle.regions[row][col];
@@ -746,12 +757,16 @@ export default function Home() {
                                 ? 2
                                 : 0.5,
                           }}
-                          aria-label={`第 ${row + 1} 列，第 ${col + 1} 欄，牧區 ${region + 1}，${state === 2 ? '有牛' : state === 1 ? '已排除' : '空白'}`}
+                          aria-label={`第 ${row + 1} 列，第 ${col + 1} 欄，牧區 ${region + 1}，${state === 2 ? '有牛' : isAutomatic ? '自動排除' : state === 1 ? '已排除' : '空白'}`}
                           aria-invalid={conflicts.has(index)}
                           aria-disabled={solved}
                           onClick={() => cycleCell(index)}
                         >
-                          {state === 1 && <span className="note-dot" />}
+                          {state === 1 && (
+                            <span
+                              className={`note-dot ${isAutomatic ? 'auto-note' : ''}`}
+                            />
+                          )}
                           {state === 2 && <span className="bull-mark">牛</span>}
                         </button>
                       );
@@ -905,6 +920,8 @@ export default function Home() {
                   {isHard
                     ? `目前：${paint === 'cow' ? '放牛' : '排除'} · 同一格再點一下清除`
                     : '點一下排除 · 再點放牛 · 第三下清除'}
+                  <br />
+                  放牛自動排除 · 空心記號隨牛更新
                 </p>
               </section>
             )}
