@@ -3,7 +3,23 @@ import { CAMPAIGN } from '../lib/campaign-data.ts';
 import { HARD } from '../lib/hard-data.ts';
 import { generatePuzzle } from '../lib/puzzles.ts';
 import { solutionCells, nextDeduction, isSolved } from '../lib/logic.ts';
-import { withAutomaticExclusions } from '../lib/auto-exclusions.ts';
+import {
+  AUTO_EXCLUSIONS_KEY,
+  parseAutoExclusionsPreference,
+  withAutomaticExclusions,
+} from '../lib/auto-exclusions.ts';
+
+assert.equal(parseAutoExclusionsPreference(null), true);
+assert.equal(parseAutoExclusionsPreference('true'), true);
+assert.equal(parseAutoExclusionsPreference('false'), false);
+assert.equal(parseAutoExclusionsPreference('corrupt'), true);
+assert.ok(AUTO_EXCLUSIONS_KEY.startsWith('wildgrid-'));
+for (const enabled of [true, false])
+  assert.equal(
+    parseAutoExclusionsPreference(String(enabled)),
+    enabled,
+    'preference survives reload',
+  );
 
 const puzzles = [...CAMPAIGN, ...HARD, ...[1, 20, 1000].map(generatePuzzle)];
 for (const puzzle of puzzles) {
@@ -16,6 +32,22 @@ for (const puzzle of puzzles) {
     board[cow] = 2;
     const snapshot = JSON.stringify(board);
     const visible = withAutomaticExclusions(puzzle, board);
+    const disabled = withAutomaticExclusions(puzzle, board, false);
+    assert.deepEqual(
+      disabled,
+      board,
+      'turning off restores raw board without automatic notes',
+    );
+    assert.notEqual(
+      disabled,
+      board,
+      'derived board never aliases the stored board',
+    );
+    assert.deepEqual(
+      withAutomaticExclusions(puzzle, board, true),
+      visible,
+      'turning back on recomputes current cows',
+    );
     assert.equal(
       JSON.stringify(board),
       snapshot,
@@ -65,6 +97,11 @@ for (const puzzle of puzzles) {
     (v, i) => v === 1 && manual[i] === 0,
   );
   manual[auto] = 1;
+  assert.deepEqual(
+    withAutomaticExclusions(puzzle, manual, false),
+    manual,
+    'turning off retains manual notes and cows',
+  );
   assert.equal(withAutomaticExclusions(puzzle, manual)[auto], 1);
   manual[solution[0]] = 0;
   assert.deepEqual(

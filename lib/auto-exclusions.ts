@@ -1,11 +1,17 @@
 import { touching, unitsFor } from './double-logic.ts';
 import type { CellState, GridPuzzle } from './logic.ts';
 
+export const AUTO_EXCLUSIONS_KEY = 'wildgrid-auto-exclusions-v1';
+export const parseAutoExclusionsPreference = (value: string | null) =>
+  value !== 'false';
+
 // Automatic notes are derived, never saved over the player's own notes.
 export function withAutomaticExclusions(
   puzzle: GridPuzzle,
   board: CellState[],
+  enabled = true,
 ) {
+  if (!enabled) return [...board];
   const size = puzzle.regions.length;
   const quota = puzzle.cowsPerUnit ?? 1;
   const cows = board.flatMap((value, index) => (value === 2 ? [index] : []));

@@ -30,6 +30,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Dialog,
@@ -45,7 +46,11 @@ import { CHAPTERS, chapterFor, chapterImage } from '@/lib/chapters';
 import { CAMPAIGN } from '@/lib/campaign-data';
 import { HARD } from '@/lib/hard-data';
 import { generatePuzzle } from '@/lib/puzzles';
-import { withAutomaticExclusions } from '@/lib/auto-exclusions';
+import {
+  AUTO_EXCLUSIONS_KEY,
+  parseAutoExclusionsPreference,
+  withAutomaticExclusions,
+} from '@/lib/auto-exclusions';
 import {
   conflictsFor,
   isSolved,
@@ -88,6 +93,7 @@ export default function Home() {
     level: 0,
   });
   const [hydrated, setHydrated] = useState(false);
+  const [autoExclusions, setAutoExclusions] = useState(true);
   const [storageMessage, setStorageMessage] = useState('');
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [history, setHistory] = useState<CellState[][]>([]);
@@ -133,8 +139,8 @@ export default function Home() {
   const session = progress.records[key] ?? emptySession(size),
     board = session.board;
   const visibleBoard = useMemo(
-    () => withAutomaticExclusions(puzzle, board),
-    [puzzle, board],
+    () => withAutomaticExclusions(puzzle, board, autoExclusions),
+    [puzzle, board, autoExclusions],
   );
   const conflicts = useMemo(() => conflictsFor(puzzle, board), [puzzle, board]);
   const solved = isSolved(puzzle, board);
@@ -158,6 +164,15 @@ export default function Home() {
   } as CSSProperties;
 
   useEffect(() => {
+    try {
+      setAutoExclusions(
+        parseAutoExclusionsPreference(
+          localStorage.getItem(AUTO_EXCLUSIONS_KEY),
+        ),
+      );
+    } catch {
+      // Storage may be unavailable; the switch still works for this visit.
+    }
     try {
       const saved = localStorage.getItem(SAVE_KEY);
       if (saved) {
@@ -270,6 +285,19 @@ export default function Home() {
     );
     setHint(null);
     if (isSolved(puzzle, next)) navigator.vibrate?.([40, 30, 70]);
+  };
+  const toggleAutoExclusions = (enabled: boolean) => {
+    setAutoExclusions(enabled);
+    setHint(null);
+    const feedback = enabled
+      ? '已開啟自動排除'
+      : '已關閉自動排除，手動記號保留';
+    try {
+      localStorage.setItem(AUTO_EXCLUSIONS_KEY, String(enabled));
+      setMessage(feedback);
+    } catch {
+      setMessage(`${feedback}；目前無法儲存設定，僅套用於本次遊戲。`);
+    }
   };
   const cycleCell = (index: number) => {
     if (solved || !hydrated) return;
@@ -625,7 +653,7 @@ export default function Home() {
                       {isHard
                         ? '先選「放牛」或「排除」，再點格子；再次點同一格可清除。放牛會自動排除周圍八格；每列、每欄或牧區放滿兩隻時，自動排除其餘格。棋盤可放大並捲動。'
                         : '點一下放排除記號，再點放牛，第三下清除。放牛會自動排除同列、同欄、同牧區與周圍八格。'}{' '}
-                      淡色空心記號是自動排除，移除牛或復原時會跟著更新，不影響手動記號。
+                      可用棋盤上方的「自動排除」開關選擇是否啟用。淡色空心記號是自動排除，移除牛或復原時會跟著更新，不影響手動記號。
                       提示會先說明理由；使用提示仍可解鎖下一題。
                     </p>
                   </DialogContent>
@@ -691,6 +719,15 @@ export default function Home() {
                     已放 {board.filter((v) => v === 2).length} / {size * quota}{' '}
                     隻牛
                   </span>
+                </div>
+                <div className="auto-exclusions-control">
+                  <label htmlFor="auto-exclusions">自動排除</label>
+                  <Switch
+                    id="auto-exclusions"
+                    checked={autoExclusions}
+                    disabled={!hydrated}
+                    onCheckedChange={toggleAutoExclusions}
+                  />
                 </div>
                 {isHard && (
                   <div className="board-toolbar">
@@ -921,7 +958,9 @@ export default function Home() {
                     ? `目前：${paint === 'cow' ? '放牛' : '排除'} · 同一格再點一下清除`
                     : '點一下排除 · 再點放牛 · 第三下清除'}
                   <br />
-                  放牛自動排除 · 空心記號隨牛更新
+                  {autoExclusions
+                    ? '放牛自動排除 · 空心記號隨牛更新'
+                    : '自動排除已關閉 · 自己標記線索'}
                 </p>
               </section>
             )}
