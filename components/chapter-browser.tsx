@@ -2,7 +2,7 @@
 import { Check, ChevronRight, Lock, Star } from 'lucide-react';
 import { CHAPTERS, chapterImage } from '@/lib/chapters';
 import { CAMPAIGN } from '@/lib/campaign-data';
-import { unlockedLevel, type Progress } from '@/lib/progress';
+import { unlockedLevel, keyFor, type Progress } from '@/lib/progress';
 import {
   Select,
   SelectContent,
@@ -15,16 +15,20 @@ import type { CSSProperties } from 'react';
 export function ChapterCards({
   progress,
   onSelect,
+  obstacles = false,
 }: {
   progress: Progress;
   onSelect: (chapter: number) => void;
+  obstacles?: boolean;
 }) {
-  const unlocked = unlockedLevel(progress);
+  const unlocked = unlockedLevel(progress, 'campaign', obstacles);
   return (
     <div className="chapter-cards">
       {CHAPTERS.map((chapter, c) => {
-        const done = CAMPAIGN.slice(c * 20, c * 20 + 20).filter((p) =>
-          progress.completed.includes(p.id),
+        const done = CAMPAIGN.slice(c * 20, c * 20 + 20).filter((_, i) =>
+          progress.completed.includes(
+            keyFor({ mode: 'campaign', level: c * 20 + i, obstacles }),
+          ),
         ).length;
         return (
           <button
@@ -74,15 +78,17 @@ export function LevelPicker({
   progress,
   current,
   onPlay,
+  obstacles = false,
 }: {
   chapter: number;
   onChapter: (chapter: number) => void;
   progress: Progress;
   current?: number;
   onPlay: (level: number) => void;
+  obstacles?: boolean;
 }) {
   const info = CHAPTERS[chapter],
-    unlocked = unlockedLevel(progress);
+    unlocked = unlockedLevel(progress, 'campaign', obstacles);
   return (
     <div
       className="level-picker"
@@ -124,7 +130,7 @@ export function LevelPicker({
       <div className="level-grid">
         {Array.from({ length: 20 }, (_, i) => {
           const level = chapter * 20 + i,
-            id = CAMPAIGN[level].id,
+            id = keyFor({ mode: 'campaign', level, obstacles }),
             done = progress.completed.includes(id),
             locked = level > unlocked,
             perfect = progress.flawless.includes(id);

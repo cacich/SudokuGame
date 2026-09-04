@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Infinity, Play, Mountain } from 'lucide-react';
+import { BookOpen, Infinity, Play, Mountain, Grid2X2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type Props = {
@@ -9,6 +9,7 @@ type Props = {
   onCampaign: () => void;
   onEndless: () => void;
   onHard: () => void;
+  onMixed: () => void;
 };
 
 export function HomeScreen({
@@ -17,6 +18,7 @@ export function HomeScreen({
   onCampaign,
   onEndless,
   onHard,
+  onMixed,
 }: Props) {
   return (
     <section className="home-screen" aria-label="選擇遊戲模式">
@@ -50,6 +52,10 @@ export function HomeScreen({
           <span>雙牛模式</span>
         </Button>
       )}
+      <Button variant="outline" className="home-mode" onClick={onMixed}>
+        <Grid2X2 />
+        <span>混合牧場</span>
+      </Button>
     </section>
   );
 }

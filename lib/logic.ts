@@ -1,9 +1,16 @@
 export type CellState = 0 | 1 | 2;
-import { nextDoubleDeduction, touching, unitsFor } from './double-logic.ts';
+import {
+  nextDoubleDeduction,
+  touching,
+  unitsFor,
+  unitQuota,
+} from './double-logic.ts';
 export type GridPuzzle = {
   regions: number[][];
   solution: number[] | number[][];
   cowsPerUnit?: 1 | 2;
+  regionQuotas?: number[];
+  blocked?: number[];
 };
 export function solutionCells(puzzle: GridPuzzle) {
   return puzzle.solution.flatMap((columns, row) =>
@@ -37,16 +44,18 @@ export function incompatible(puzzle: GridPuzzle, a: number, b: number) {
 export function conflictsFor(puzzle: GridPuzzle, board: CellState[]) {
   const bulls = board.flatMap((v, i) => (v === 2 ? [i] : []));
   const bad = new Set<number>();
-  if (puzzle.cowsPerUnit === 2) {
+  for (const cell of puzzle.blocked ?? []) if (board[cell] === 2) bad.add(cell);
+  if (puzzle.cowsPerUnit === 2 || puzzle.regionQuotas) {
     for (let a = 0; a < bulls.length; a++)
       for (let b = a + 1; b < bulls.length; b++)
         if (touching(bulls[a], bulls[b], puzzle.regions.length)) {
           bad.add(bulls[a]);
           bad.add(bulls[b]);
         }
-    for (const unit of unitsFor(puzzle)) {
+    for (const [u, unit] of unitsFor(puzzle).entries()) {
       const placed = unit.filter((i) => board[i] === 2);
-      if (placed.length > 2) placed.forEach((i) => bad.add(i));
+      if (placed.length > unitQuota(puzzle, u))
+        placed.forEach((i) => bad.add(i));
     }
     return bad;
   }
@@ -73,7 +82,12 @@ export function nextDeduction(
   puzzle: GridPuzzle,
   board: CellState[],
 ): Deduction | null {
-  if (puzzle.cowsPerUnit === 2) return nextDoubleDeduction(puzzle, board);
+  if (puzzle.blocked?.length) {
+    const blocked = new Set(puzzle.blocked);
+    board = board.map((value, i) => (blocked.has(i) ? 1 : value));
+  }
+  if (puzzle.cowsPerUnit === 2 || puzzle.regionQuotas)
+    return nextDoubleDeduction(puzzle, board);
   const n = puzzle.regions.length;
   const ids = Array.from({ length: n * n }, (_, i) => i);
   const groups = [
@@ -208,7 +222,7 @@ export function logicalSolve(puzzle: GridPuzzle) {
 
 // Independent row-by-row exact search, stopping at two solutions for uniqueness checks.
 export function exactSolutions(
-  puzzle: Pick<GridPuzzle, 'regions'>,
+  puzzle: Pick<GridPuzzle, 'regions' | 'blocked'>,
   limit = 2,
 ): number[][] {
   const n = puzzle.regions.length,
@@ -222,6 +236,7 @@ export function exactSolutions(
     for (let col = 0; col < n; col++) {
       const region = puzzle.regions[row][col];
       if (
+        puzzle.blocked?.includes(row * n + col) ||
         colMask & (1 << col) ||
         regionMask & (1 << region) ||
         (row > 0 && Math.abs(columns[row - 1] - col) <= 1)

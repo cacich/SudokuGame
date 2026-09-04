@@ -1,4 +1,4 @@
-import { touching, unitsFor } from './double-logic.ts';
+import { touching, unitsFor, unitQuota } from './double-logic.ts';
 import type { CellState, GridPuzzle } from './logic.ts';
 
 export const AUTO_EXCLUSIONS_KEY = 'wildgrid-auto-exclusions-v1';
@@ -13,21 +13,24 @@ export function withAutomaticExclusions(
 ) {
   if (!enabled) return [...board];
   const size = puzzle.regions.length;
-  const quota = puzzle.cowsPerUnit ?? 1;
   const cows = board.flatMap((value, index) => (value === 2 ? [index] : []));
   const excluded = new Set<number>();
   for (let index = 0; index < board.length; index++) {
     if (board[index] !== 2 && cows.some((cow) => touching(cow, index, size)))
       excluded.add(index);
   }
-  for (const unit of unitsFor(puzzle)) {
-    if (unit.filter((index) => board[index] === 2).length >= quota)
+  for (const [u, unit] of unitsFor(puzzle).entries()) {
+    if (
+      unit.filter((index) => board[index] === 2).length >= unitQuota(puzzle, u)
+    )
       unit.forEach((index) => {
         if (board[index] !== 2) excluded.add(index);
       });
   }
   return board.map(
     (value, index): CellState =>
-      value === 0 && excluded.has(index) ? 1 : value,
+      value === 0 && excluded.has(index) && !puzzle.blocked?.includes(index)
+        ? 1
+        : value,
   );
 }

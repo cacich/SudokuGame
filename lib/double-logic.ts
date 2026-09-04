@@ -5,7 +5,18 @@ export type DoublePuzzle = {
   solution: number[][];
   cowsPerUnit: 2;
 };
-type RegionGrid = { regions: number[][] };
+type RegionGrid = {
+  regions: number[][];
+  cowsPerUnit?: 1 | 2;
+  regionQuotas?: number[];
+  blocked?: number[];
+};
+export const unitQuota = (puzzle: RegionGrid, unit: number) =>
+  unit < puzzle.regions.length * 2
+    ? (puzzle.cowsPerUnit ?? 1)
+    : (puzzle.regionQuotas?.[unit - puzzle.regions.length * 2] ??
+      puzzle.cowsPerUnit ??
+      1);
 export function unitsFor(puzzle: RegionGrid) {
   const n = puzzle.regions.length,
     cells = Array.from({ length: n * n }, (_, i) => i);
@@ -14,7 +25,7 @@ export function unitsFor(puzzle: RegionGrid) {
       cells.filter((i) => Math.floor(i / n) === r),
     ),
     ...Array.from({ length: n }, (_, c) => cells.filter((i) => i % n === c)),
-    ...Array.from({ length: n }, (_, z) =>
+    ...Array.from({ length: Math.max(...puzzle.regions.flat()) + 1 }, (_, z) =>
       cells.filter((i) => puzzle.regions[Math.floor(i / n)][i % n] === z),
     ),
   ];
@@ -44,6 +55,11 @@ export function doubleSolutions(
     }[] = [];
     for (let a = 0; a < n; a++)
       for (let b = a + 2; b < n; b++) {
+        if (
+          puzzle.blocked?.includes(r * n + a) ||
+          puzzle.blocked?.includes(r * n + b)
+        )
+          continue;
         if (
           board &&
           (board[r * n + a] === 1 ||
@@ -180,17 +196,17 @@ export function nextDoubleDeduction(
     };
   for (let u = 0; u < units.length; u++) {
     const cells = units[u].filter((i) => board[i] === 0);
-    if (counts[u] === 2 && cells.length)
+    if (counts[u] === unitQuota(puzzle, u) && cells.length)
       return {
         cells,
         value: 1,
         tier: 0,
         focus: units[u].filter((i) => board[i] === 2),
-        reason: `${label(u)}已有兩隻牛，其餘位置都能排除。`,
+        reason: `${label(u)}已放滿 ${unitQuota(puzzle, u)} 隻牛，其餘位置都能排除。`,
       };
   }
   const legalAddition = (cells: number[]) => {
-    const extra = Array(n * 3).fill(0);
+    const extra = Array(units.length).fill(0);
     for (let k = 0; k < cells.length; k++) {
       const i = cells[k];
       if (
@@ -198,12 +214,13 @@ export function nextDoubleDeduction(
         cells.slice(0, k).some((b) => touching(i, b, n))
       )
         return false;
-      for (const u of groupsOf(i)) if (++extra[u] + counts[u] > 2) return false;
+      for (const u of groupsOf(i))
+        if (++extra[u] + counts[u] > unitQuota(puzzle, u)) return false;
     }
     return true;
   };
   for (let u = 0; u < units.length; u++) {
-    const needed = 2 - counts[u];
+    const needed = unitQuota(puzzle, u) - counts[u];
     if (needed <= 0) continue;
     const candidates = units[u].filter((i) => board[i] === 0),
       options: number[][] = [];
@@ -240,7 +257,7 @@ export function nextDoubleDeduction(
         value: 1,
         tier: 2,
         focus: candidates,
-        reason: `${label(u)}還缺 ${needed} 隻牛。不論採用哪種可行擺法，亮起的格子都會相鄰或造成超過兩隻，因此可以排除。`,
+        reason: `${label(u)}還缺 ${needed} 隻牛。不論採用哪種可行擺法，亮起的格子都會相鄰或超過列、欄、牧區的上限，因此可以排除。`,
       };
   }
   return null;

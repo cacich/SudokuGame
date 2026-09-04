@@ -28,6 +28,8 @@ import {
   ZoomIn,
   ZoomOut,
   Settings2,
+  Mountain,
+  Waves,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -45,7 +47,8 @@ import { ChapterCards, LevelPicker } from '@/components/chapter-browser';
 import { CHAPTERS, chapterFor, chapterImage } from '@/lib/chapters';
 import { CAMPAIGN } from '@/lib/campaign-data';
 import { HARD } from '@/lib/hard-data';
-import { generatePuzzle } from '@/lib/puzzles';
+import { MIXED } from '@/lib/mixed-data';
+import { puzzleFor } from '@/lib/game-puzzles';
 import {
   AUTO_EXCLUSIONS_KEY,
   parseAutoExclusionsPreference,
@@ -64,6 +67,7 @@ import {
   SAVE_KEY,
   LEGACY_KEY,
   MAX_ENDLESS,
+  WILD_SUFFIX,
   canOpen,
   emptyProgress,
   emptySession,
@@ -80,10 +84,17 @@ import {
 const formatTime = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 const labelFor = (s: Selection) =>
-  s.mode === 'campaign'
+  (s.obstacles ? '荒野 · ' : '') +
+  (s.mode === 'campaign'
     ? `${chapterFor(s.level).name} · ${(s.level % 20) + 1} / 20`
-    : `${s.mode === 'hard' ? '雙牛挑戰' : '無盡牧場'} · 第 ${s.level + 1} 題`;
+    : `${s.mode === 'hard' ? '雙牛挑戰' : s.mode === 'mixed' ? '混合牧場' : '無盡牧場'} · 第 ${s.level + 1} 題`);
 const DEFAULT_MESSAGE = '每列、每欄、每個牧區各放一隻牛';
+const rulesFor = (s: Selection) =>
+  s.mode === 'mixed'
+    ? '每列、每欄各一隻；牧區依 ×1、×2 標示放牛'
+    : s.mode === 'hard'
+      ? '每列、每欄、每個牧區各放兩隻牛'
+      : DEFAULT_MESSAGE;
 
 export default function Home() {
   const [view, setView] = useState<'home' | 'chapters' | 'play'>('home');
@@ -112,12 +123,7 @@ export default function Home() {
   const puzzleResult = useMemo(() => {
     try {
       return {
-        puzzle:
-          selection.mode === 'campaign'
-            ? CAMPAIGN[selection.level]
-            : selection.mode === 'hard'
-              ? HARD[selection.level]
-              : generatePuzzle(selection.level + 1),
+        puzzle: puzzleFor(selection),
         error: '',
       };
     } catch {
@@ -129,11 +135,14 @@ export default function Home() {
   }, [selection]);
   const puzzle: GridPuzzle = puzzleResult.puzzle ?? CAMPAIGN[0];
   const isHard = selection.mode === 'hard';
+  const isMixed = selection.mode === 'mixed';
+  const directPaint = isHard || isMixed;
+  const challengeBank = isMixed ? MIXED : HARD;
+  const obstacles = !!selection.obstacles;
+  const blocked = useMemo(() => new Set(puzzle.blocked ?? []), [puzzle]);
   const quota = puzzle.cowsPerUnit ?? 1;
   const correctCells = useMemo(() => new Set(solutionCells(puzzle)), [puzzle]);
-  const defaultMessage = isHard
-    ? '每列、每欄、每個牧區各放兩隻牛'
-    : DEFAULT_MESSAGE;
+  const defaultMessage = rulesFor(selection);
   const size = puzzle.regions.length,
     key = keyFor(selection);
   const session = progress.records[key] ?? emptySession(size),
@@ -147,13 +156,13 @@ export default function Home() {
   const chapterIndex =
       selection.mode === 'campaign'
         ? Math.floor(selection.level / 20)
-        : isHard
+        : directPaint
           ? 8
           : 0,
     chapter = CHAPTERS[chapterIndex];
-  const campaignDone = progress.completed.filter((id) =>
-    id.startsWith('journey-v1-'),
-  ).length;
+  const variantComplete = (id: string) =>
+    progress.completed.includes(id + (obstacles ? WILD_SUFFIX : ''));
+  const campaignDone = CAMPAIGN.filter((p) => variantComplete(p.id)).length;
   const nextSelection = { ...selection, level: selection.level + 1 };
   const canNext = canOpen(progress, nextSelection);
   const theme = {
@@ -215,17 +224,13 @@ export default function Home() {
       setProgress((p) => ({ ...p, last: target }));
       setHistory([]);
       setHint(null);
-      setMessage(
-        target.mode === 'hard'
-          ? '每列、每欄、每個牧區各放兩隻牛'
-          : DEFAULT_MESSAGE,
-      );
+      setMessage(rulesFor(target));
       setZoomed(false);
       setPaint('cow');
       setRulesOpen(
-        target.mode === 'hard' &&
+        (target.mode === 'hard' || target.mode === 'mixed') &&
           !Object.keys(progress.records).some((k) =>
-            k.startsWith('double-v1-'),
+            k.startsWith(target.mode === 'mixed' ? 'mixed-v1-' : 'double-v1-'),
           ),
       );
       setPickerOpen(false);
@@ -300,13 +305,13 @@ export default function Home() {
     }
   };
   const cycleCell = (index: number) => {
-    if (solved || !hydrated) return;
+    if (solved || !hydrated || blocked.has(index)) return;
     if (board[index] === 0 && visibleBoard[index] === 1) {
       setMessage('這格已自動排除；移除相關的牛後會自動恢復。');
       return;
     }
     const next = [...board];
-    next[index] = isHard
+    next[index] = directPaint
       ? next[index] === (paint === 'cow' ? 2 : 1)
         ? 0
         : paint === 'cow'
@@ -443,31 +448,58 @@ export default function Home() {
           inputSchema: {
             type: 'object',
             properties: {
-              mode: { type: 'string', enum: ['campaign', 'endless', 'hard'] },
+              mode: {
+                type: 'string',
+                enum: ['campaign', 'endless', 'hard', 'mixed'],
+              },
               level: { type: 'integer', minimum: 1, maximum: MAX_ENDLESS },
+              obstacles: {
+                type: 'boolean',
+                description: '開啟荒野障礙版；省略時沿用目前版本',
+              },
             },
             required: ['level'],
             additionalProperties: false,
           },
           annotations: { readOnlyHint: false, untrustedContentHint: false },
           execute(input: unknown) {
-            const value = input as { level?: number; mode?: string },
+            const value = input as {
+                level?: number;
+                mode?: string;
+                obstacles?: boolean;
+              },
               mode = value.mode ?? selection.mode;
             if (
               !Number.isInteger(value.level) ||
-              (mode !== 'campaign' && mode !== 'endless' && mode !== 'hard')
+              (value.obstacles !== undefined &&
+                typeof value.obstacles !== 'boolean') ||
+              (mode !== 'campaign' &&
+                mode !== 'endless' &&
+                mode !== 'hard' &&
+                mode !== 'mixed')
             )
               throw new Error('請提供有效的模式與整數題號');
-            if (!openPuzzle({ mode, level: Number(value.level) - 1 }))
+            if (
+              !openPuzzle({
+                mode,
+                level: Number(value.level) - 1,
+                obstacles: value.obstacles ?? selection.obstacles,
+              })
+            )
               throw new Error('題號超出範圍或尚未解鎖');
-            return { mode, level: value.level, status: 'ready' };
+            return {
+              mode,
+              level: value.level,
+              obstacles: value.obstacles ?? !!selection.obstacles,
+              status: 'ready',
+            };
           },
         },
         { signal: lifecycle.signal },
       ),
     ).catch(() => undefined);
     return () => lifecycle.abort();
-  }, [hydrated, openPuzzle, selection.mode]);
+  }, [hydrated, openPuzzle, selection.mode, selection.obstacles]);
 
   return (
     <div className="journey-app" style={view === 'play' ? theme : undefined}>
@@ -488,6 +520,7 @@ export default function Home() {
               onEndless={() =>
                 openPuzzle({
                   mode: 'endless',
+                  obstacles,
                   level:
                     progress.last?.mode === 'endless' ? progress.last.level : 0,
                 })
@@ -495,7 +528,15 @@ export default function Home() {
               onHard={() =>
                 openPuzzle({
                   mode: 'hard',
-                  level: unlockedLevel(progress, 'hard'),
+                  obstacles,
+                  level: unlockedLevel(progress, 'hard', obstacles),
+                })
+              }
+              onMixed={() =>
+                openPuzzle({
+                  mode: 'mixed',
+                  obstacles,
+                  level: unlockedLevel(progress, 'mixed', obstacles),
                 })
               }
             />
@@ -554,7 +595,9 @@ export default function Home() {
                 <ArrowLeft />
               </Button>
               <div>
-                <p className="eyebrow">牧場旅程</p>
+                <p className="eyebrow">
+                  {obstacles ? '荒野牧場旅程' : '牧場旅程'}
+                </p>
                 <h1>走過十座牧場</h1>
               </div>
               <span>{campaignDone} / 200</span>
@@ -562,16 +605,21 @@ export default function Home() {
             <Button
               className="journey-continue"
               onClick={() =>
-                openPuzzle({ mode: 'campaign', level: unlockedLevel(progress) })
+                openPuzzle({
+                  mode: 'campaign',
+                  obstacles,
+                  level: unlockedLevel(progress, 'campaign', obstacles),
+                })
               }
             >
               {campaignDone === 200
                 ? '重訪最後的牧場'
-                : `繼續旅程 · ${labelFor({ mode: 'campaign', level: unlockedLevel(progress) })}`}
+                : `繼續旅程 · ${labelFor({ mode: 'campaign', obstacles, level: unlockedLevel(progress, 'campaign', obstacles) })}`}
               <ChevronRight />
             </Button>
             <ChapterCards
               progress={progress}
+              obstacles={obstacles}
               onSelect={(c) => {
                 setPickerChapter(c);
                 setPickerOpen(true);
@@ -587,14 +635,19 @@ export default function Home() {
                     ? `牧場旅程 · 第 ${chapterIndex + 1} 大關`
                     : isHard
                       ? '困難模式 · 每區兩隻牛'
-                      : '無盡模式'}
+                      : isMixed
+                        ? '混合模式 · 每區一或兩隻牛'
+                        : '無盡模式'}
+                  {obstacles && ' · 荒野'}
                 </p>
                 <h1>
                   {selection.mode === 'campaign'
                     ? chapter.name
                     : isHard
                       ? '雙牛挑戰'
-                      : '無盡牧場'}
+                      : isMixed
+                        ? '混合牧場'
+                        : '無盡牧場'}
                 </h1>
               </div>
               <div className="header-actions">
@@ -620,11 +673,15 @@ export default function Home() {
                   </DialogTrigger>
                   <DialogContent className="rules-dialog">
                     <DialogHeader>
-                      <DialogTitle>三條簡單規則</DialogTitle>
+                      <DialogTitle>
+                        {obstacles ? '荒野牧場規則' : '牧場規則'}
+                      </DialogTitle>
                       <DialogDescription>
-                        {isHard
-                          ? '每列、每欄、每個牧區都要放兩隻牛，共 20 隻。每題都有唯一解。'
-                          : '每一題都經過唯一解驗證。旅程題庫也經逐步邏輯驗證。'}
+                        {isMixed
+                          ? '每列、每欄各一隻，牧區依 ×1 或 ×2 標示放牛。40 題都有唯一解與逐步邏輯提示。'
+                          : isHard
+                            ? '每列、每欄、每個牧區都要放兩隻牛，共 20 隻。每題都有唯一解。'
+                            : '每一題都經過唯一解驗證。旅程題庫也經逐步邏輯驗證。'}
                       </DialogDescription>
                     </DialogHeader>
                     <ol className="rule-list">
@@ -638,8 +695,10 @@ export default function Home() {
                       <li>
                         <span>2</span>
                         <p>
-                          <b>彩色牧區</b>每個粗線圍起的牧區剛好
-                          {isHard ? '兩' : '一'}隻牛。
+                          <b>彩色牧區</b>
+                          {isMixed
+                            ? '依左上角的 ×1、×2 標示，放足指定數量。'
+                            : `每個粗線圍起的牧區剛好${isHard ? '兩' : '一'}隻牛。`}
                         </p>
                       </li>
                       <li>
@@ -649,10 +708,17 @@ export default function Home() {
                         </p>
                       </li>
                     </ol>
+                    {obstacles && (
+                      <p className="rule-note">
+                        池塘與岩石不能放牛，也不需要標記。障礙不會阻隔牛之間的相鄰判定。荒野版與原版分開儲存、解鎖；切換會保留作答。
+                      </p>
+                    )}
                     <p className="rule-note">
-                      {isHard
-                        ? '先選「放牛」或「排除」，再點格子；再次點同一格可清除。放牛會自動排除周圍八格；每列、每欄或牧區放滿兩隻時，自動排除其餘格。棋盤可放大並捲動。'
-                        : '點一下放排除記號，再點放牛，第三下清除。放牛會自動排除同列、同欄、同牧區與周圍八格。'}{' '}
+                      {isMixed
+                        ? '先選「放牛」或「排除」再點格子；再次點同一格可清除。自動排除會依列、欄與各牧區的數量上限判定。'
+                        : isHard
+                          ? '先選「放牛」或「排除」，再點格子；再次點同一格可清除。放牛會自動排除周圍八格；每列、每欄或牧區放滿兩隻時，自動排除其餘格。棋盤可放大並捲動。'
+                          : '點一下放排除記號，再點放牛，第三下清除。放牛會自動排除同列、同欄、同牧區與周圍八格。'}{' '}
                       可用棋盤上方的「自動排除」開關選擇是否啟用。淡色空心記號是自動排除，移除牛或復原時會跟著更新，不影響手動記號。
                       提示會先說明理由；使用提示仍可解鎖下一題。
                     </p>
@@ -713,23 +779,63 @@ export default function Home() {
                 </div>
                 <div className="board-meta">
                   <span>
-                    {size} × {size} · {isHard ? '每區 2 隻' : '唯一解'}
+                    {size} × {size} ·{' '}
+                    {isMixed ? '每區依標示' : isHard ? '每區 2 隻' : '唯一解'}
                   </span>
                   <span>
                     已放 {board.filter((v) => v === 2).length} / {size * quota}{' '}
                     隻牛
                   </span>
                 </div>
-                <div className="auto-exclusions-control">
-                  <label htmlFor="auto-exclusions">自動排除</label>
-                  <Switch
-                    id="auto-exclusions"
-                    checked={autoExclusions}
-                    disabled={!hydrated}
-                    onCheckedChange={toggleAutoExclusions}
-                  />
+                <div className="play-settings">
+                  <div className="auto-exclusions-control">
+                    <label htmlFor="wild-obstacles">荒野障礙</label>
+                    <Switch
+                      id="wild-obstacles"
+                      checked={obstacles}
+                      disabled={!hydrated}
+                      onCheckedChange={(enabled) => {
+                        const level =
+                          selection.mode === 'endless'
+                            ? selection.level
+                            : Math.min(
+                                selection.level,
+                                unlockedLevel(
+                                  progress,
+                                  selection.mode,
+                                  enabled,
+                                ),
+                              );
+                        if (
+                          openPuzzle({
+                            ...selection,
+                            level,
+                            obstacles: enabled,
+                          })
+                        )
+                          setMessage(
+                            `${enabled ? '已進入荒野版，池塘與岩石不能放牛' : '已回到原版'}。作答分開保留${level !== selection.level ? '，已前往此版本可挑戰的題目' : ''}。`,
+                          );
+                      }}
+                    />
+                  </div>
+                  <div className="auto-exclusions-control">
+                    <label htmlFor="auto-exclusions">自動排除</label>
+                    <Switch
+                      id="auto-exclusions"
+                      checked={autoExclusions}
+                      disabled={!hydrated}
+                      onCheckedChange={toggleAutoExclusions}
+                    />
+                  </div>
                 </div>
-                {isHard && (
+                {obstacles && (
+                  <p className="obstacle-help">
+                    <Waves aria-hidden="true" /> 池塘・
+                    <Mountain aria-hidden="true" /> 岩石：不能放牛
+                  </p>
+                )}
+                {directPaint && (
                   <div className="board-toolbar">
                     <ToggleGroup
                       value={[paint]}
@@ -753,7 +859,7 @@ export default function Home() {
                   </div>
                 )}
                 <div
-                  className={`board-wrap ${isHard ? 'double-board' : ''} ${zoomed ? 'zoomed' : ''}`}
+                  className={`board-wrap ${directPaint ? 'double-board' : ''} ${isMixed ? 'mixed-board' : ''} ${zoomed ? 'zoomed' : ''}`}
                   tabIndex={zoomed ? 0 : undefined}
                   aria-label={zoomed ? '放大棋盤，可水平與垂直捲動' : undefined}
                 >
@@ -765,13 +871,14 @@ export default function Home() {
                   >
                     {visibleBoard.map((state, index) => {
                       const isAutomatic = board[index] === 0 && state === 1;
+                      const isBlocked = blocked.has(index);
                       const row = Math.floor(index / size),
                         col = index % size,
                         region = puzzle.regions[row][col];
                       return (
                         <button
                           key={`${key}-${index}`}
-                          className={`cell region-${region} ${conflicts.has(index) ? 'conflict' : ''} ${hint?.focus.includes(index) ? 'hint-focus' : ''} ${hint?.cells.includes(index) ? 'hint-target' : ''}`}
+                          className={`cell region-${region} ${isBlocked ? 'blocked-cell' : ''} ${conflicts.has(index) ? 'conflict' : ''} ${hint?.focus.includes(index) ? 'hint-focus' : ''} ${hint?.cells.includes(index) ? 'hint-target' : ''}`}
                           style={{
                             borderTopWidth:
                               row === 0 ||
@@ -794,17 +901,38 @@ export default function Home() {
                                 ? 2
                                 : 0.5,
                           }}
-                          aria-label={`第 ${row + 1} 列，第 ${col + 1} 欄，牧區 ${region + 1}，${state === 2 ? '有牛' : isAutomatic ? '自動排除' : state === 1 ? '已排除' : '空白'}`}
+                          aria-label={`第 ${row + 1} 列，第 ${col + 1} 欄，牧區 ${region + 1}${isMixed ? `，需要 ${puzzle.regionQuotas![region]} 隻牛` : ''}，${isBlocked ? '障礙，不能放牛' : state === 2 ? '有牛' : isAutomatic ? '自動排除' : state === 1 ? '已排除' : '空白'}`}
                           aria-invalid={conflicts.has(index)}
-                          aria-disabled={solved}
+                          aria-disabled={solved || isBlocked}
+                          disabled={isBlocked}
                           onClick={() => cycleCell(index)}
                         >
-                          {state === 1 && (
+                          {isMixed &&
+                            puzzle.regions.flat().indexOf(region) === index && (
+                              <span className="region-quota" aria-hidden="true">
+                                ×{puzzle.regionQuotas![region]}
+                              </span>
+                            )}
+                          {isBlocked &&
+                            (index % 2 ? (
+                              <Mountain
+                                className="obstacle-icon"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <Waves
+                                className="obstacle-icon"
+                                aria-hidden="true"
+                              />
+                            ))}
+                          {!isBlocked && state === 1 && (
                             <span
                               className={`note-dot ${isAutomatic ? 'auto-note' : ''}`}
                             />
                           )}
-                          {state === 2 && <span className="bull-mark">牛</span>}
+                          {!isBlocked && state === 2 && (
+                            <span className="bull-mark">牛</span>
+                          )}
                         </button>
                       );
                     })}
@@ -817,16 +945,19 @@ export default function Home() {
                   {solved
                     ? selection.mode === 'campaign' && selection.level === 199
                       ? '十座牧場全數完成！謝謝你走完這段旅程。'
-                      : isHard && selection.level === HARD.length - 1
-                        ? '40 道雙牛挑戰全部完成！'
+                      : directPaint &&
+                          selection.level === challengeBank.length - 1
+                        ? `40 道${isMixed ? '混合牧場' : '雙牛挑戰'}全部完成！`
                         : selection.mode === 'campaign' &&
                             selection.level % 20 === 19
                           ? `${chapter.name}完成！下一座牧場已解鎖。`
                           : '完成了！每一隻牛都有自己的位置。'
                     : conflicts.size
-                      ? isHard
-                        ? '有牛彼此相鄰，或同列、同欄、同牧區超過兩隻。'
-                        : '有牛位於同列、同欄、同牧區，或彼此相鄰。'
+                      ? isMixed
+                        ? '有牛彼此相鄰，或超過列、欄、牧區標示的數量。'
+                        : isHard
+                          ? '有牛彼此相鄰，或同列、同欄、同牧區超過兩隻。'
+                          : '有牛位於同列、同欄、同牧區，或彼此相鄰。'
                       : message}
                 </output>
                 {hint && (
@@ -889,7 +1020,11 @@ export default function Home() {
                       onClick={() =>
                         canNext
                           ? openPuzzle(nextSelection)
-                          : setView(isHard ? 'home' : 'chapters')
+                          : setView(
+                              selection.mode === 'campaign'
+                                ? 'chapters'
+                                : 'home',
+                            )
                       }
                     >
                       {canNext
@@ -899,7 +1034,7 @@ export default function Home() {
                           : '下一題'
                         : selection.mode === 'campaign'
                           ? '查看完整旅程'
-                          : isHard
+                          : directPaint
                             ? '返回主介面'
                             : '返回旅程'}
                       <ChevronRight />
@@ -915,24 +1050,25 @@ export default function Home() {
                           CAMPAIGN.slice(
                             chapterIndex * 20,
                             chapterIndex * 20 + 20,
-                          ).filter((p) => progress.completed.includes(p.id))
-                            .length
+                          ).filter((p) => variantComplete(p.id)).length
                         }{' '}
                         / 20 題
                       </span>
                       <span>旅程 {campaignDone} / 200 題</span>
                     </>
-                  ) : isHard ? (
+                  ) : directPaint ? (
                     <>
-                      <span>雙牛挑戰</span>
+                      <span>
+                        {obstacles ? '荒野 · ' : ''}
+                        {isMixed ? '混合牧場' : '雙牛挑戰'}
+                      </span>
                       <span>
                         完成{' '}
                         {
-                          progress.completed.filter((k) =>
-                            k.startsWith('double-v1-'),
-                          ).length
+                          challengeBank.filter((p) => variantComplete(p.id))
+                            .length
                         }{' '}
-                        / {HARD.length} 題
+                        / {challengeBank.length} 題
                       </span>
                     </>
                   ) : (
@@ -944,8 +1080,10 @@ export default function Home() {
                       <span>
                         完成{' '}
                         {
-                          progress.completed.filter((k) =>
-                            k.startsWith('endless-'),
+                          progress.completed.filter(
+                            (k) =>
+                              k.startsWith('endless-') &&
+                              k.endsWith(WILD_SUFFIX) === obstacles,
                           ).length
                         }{' '}
                         題
@@ -954,7 +1092,7 @@ export default function Home() {
                   )}
                 </div>
                 <p className="tap-help">
-                  {isHard
+                  {directPaint
                     ? `目前：${paint === 'cow' ? '放牛' : '排除'} · 同一格再點一下清除`
                     : '點一下排除 · 再點放牛 · 第三下清除'}
                   <br />
@@ -991,8 +1129,8 @@ export default function Home() {
             <DialogDescription>
               {view === 'play' && selection.mode === 'endless'
                 ? '輸入題號，自由探索。原本的作答會保留。'
-                : view === 'play' && isHard
-                  ? '40 道雙牛挑戰，完成一題解鎖下一題。'
+                : view === 'play' && directPaint
+                  ? `40 道${isMixed ? '混合牧場' : '雙牛挑戰'}，完成一題解鎖下一題。${obstacles ? '目前為荒野版，與原版進度分開。' : ''}`
                   : '每座牧場有 20 題，依序完成即可解鎖。'}
             </DialogDescription>
           </DialogHeader>
@@ -1010,7 +1148,7 @@ export default function Home() {
                   setPickerError('請輸入 1 到 1,000,000 的整數。');
                   return;
                 }
-                openPuzzle({ mode: 'endless', level: number - 1 });
+                openPuzzle({ mode: 'endless', obstacles, level: number - 1 });
               }}
             >
               <label htmlFor="endless-level">題號</label>
@@ -1028,21 +1166,23 @@ export default function Home() {
               {pickerError && <p role="alert">{pickerError}</p>}
               <Button type="submit">前往牧場</Button>
             </form>
-          ) : view === 'play' && isHard ? (
+          ) : view === 'play' && directPaint ? (
             <div className="level-grid hard-level-grid">
-              {HARD.map((p, level) => (
+              {challengeBank.map((p, level) => (
                 <button
                   key={p.id}
-                  className={`level-tile ${progress.completed.includes(p.id) ? 'done' : ''} ${selection.level === level ? 'current' : ''}`}
-                  disabled={!canOpen(progress, { mode: 'hard', level })}
+                  className={`level-tile ${variantComplete(p.id) ? 'done' : ''} ${selection.level === level ? 'current' : ''}`}
+                  disabled={!canOpen(progress, { ...selection, level })}
                   aria-current={selection.level === level ? 'step' : undefined}
-                  aria-label={`雙牛第 ${level + 1} 題${progress.completed.includes(p.id) ? '，已完成' : !canOpen(progress, { mode: 'hard', level }) ? '，未解鎖' : ''}`}
-                  onClick={() => openPuzzle({ mode: 'hard', level })}
+                  aria-label={`${isMixed ? '混合牧場' : '雙牛'}第 ${level + 1} 題${variantComplete(p.id) ? '，已完成' : !canOpen(progress, { ...selection, level }) ? '，未解鎖' : ''}`}
+                  onClick={() => openPuzzle({ ...selection, level })}
                 >
                   {level + 1}
-                  {progress.flawless.includes(p.id) ? (
+                  {progress.flawless.includes(
+                    keyFor({ ...selection, level }),
+                  ) ? (
                     <Star />
-                  ) : progress.completed.includes(p.id) ? (
+                  ) : variantComplete(p.id) ? (
                     <Check />
                   ) : null}
                 </button>
@@ -1051,6 +1191,7 @@ export default function Home() {
           ) : (
             <LevelPicker
               chapter={pickerChapter}
+              obstacles={obstacles}
               onChapter={setPickerChapter}
               progress={progress}
               current={
@@ -1058,7 +1199,9 @@ export default function Home() {
                   ? selection.level
                   : undefined
               }
-              onPlay={(level) => openPuzzle({ mode: 'campaign', level })}
+              onPlay={(level) =>
+                openPuzzle({ mode: 'campaign', obstacles, level })
+              }
             />
           )}
         </DialogContent>

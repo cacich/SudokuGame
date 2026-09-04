@@ -1,9 +1,10 @@
 import { CAMPAIGN } from './campaign-data.ts';
 import { HARD } from './hard-data.ts';
+import { MIXED } from './mixed-data.ts';
 import { isSolved, type CellState, type GridPuzzle } from './logic.ts';
 
-export type Mode = 'campaign' | 'endless' | 'hard';
-export type Selection = { mode: Mode; level: number };
+export type Mode = 'campaign' | 'endless' | 'hard' | 'mixed';
+export type Selection = { mode: Mode; level: number; obstacles?: boolean };
 export type Session = { board: CellState[]; elapsed: number; hints: number };
 export type Progress = {
   version: 2;
@@ -22,12 +23,15 @@ export const emptyProgress = (): Progress => ({
   flawless: [],
   last: null,
 });
-export const keyFor = ({ mode, level }: Selection) =>
-  mode === 'campaign'
+export const WILD_SUFFIX = '-wild-v1';
+export const keyFor = ({ mode, level, obstacles }: Selection) =>
+  (mode === 'campaign'
     ? (CAMPAIGN[level]?.id ?? 'invalid')
     : mode === 'hard'
       ? (HARD[level]?.id ?? 'invalid')
-      : `endless-${level + 1}`;
+      : mode === 'mixed'
+        ? (MIXED[level]?.id ?? 'invalid')
+        : `endless-${level + 1}`) + (obstacles ? WILD_SUFFIX : '');
 export const emptySession = (size: number): Session => ({
   board: Array<CellState>(size * size).fill(0),
   elapsed: 0,
@@ -35,25 +39,37 @@ export const emptySession = (size: number): Session => ({
 });
 export function unlockedLevel(
   progress: Progress,
-  mode: 'campaign' | 'hard' = 'campaign',
+  mode: 'campaign' | 'hard' | 'mixed' = 'campaign',
+  obstacles = false,
 ) {
-  const bank = mode === 'hard' ? HARD : CAMPAIGN;
+  const bank = mode === 'hard' ? HARD : mode === 'mixed' ? MIXED : CAMPAIGN;
   let next = 0;
-  while (next < bank.length && progress.completed.includes(bank[next].id))
+  while (
+    next < bank.length &&
+    progress.completed.includes(keyFor({ mode, level: next, obstacles }))
+  )
     next++;
   return Math.min(next, bank.length - 1);
 }
 export function canOpen(progress: Progress, selection: Selection) {
   return (
     Number.isInteger(selection.level) &&
+    (selection.obstacles === undefined ||
+      typeof selection.obstacles === 'boolean') &&
     selection.level >= 0 &&
     (selection.mode === 'endless'
       ? selection.level < MAX_ENDLESS
       : selection.mode === 'hard'
         ? selection.level < HARD.length &&
-          selection.level <= unlockedLevel(progress, 'hard')
-        : selection.mode === 'campaign' &&
-          selection.level <= unlockedLevel(progress))
+          selection.level <=
+            unlockedLevel(progress, 'hard', selection.obstacles)
+        : selection.mode === 'mixed'
+          ? selection.level < MIXED.length &&
+            selection.level <=
+              unlockedLevel(progress, 'mixed', selection.obstacles)
+          : selection.mode === 'campaign' &&
+            selection.level <=
+              unlockedLevel(progress, 'campaign', selection.obstacles))
   );
 }
 export function saveSession(
@@ -81,6 +97,9 @@ export function saveSession(
 const integer = (x: unknown, fallback = 0) =>
   Number.isSafeInteger(x) && Number(x) >= 0 ? Number(x) : fallback;
 function keySize(key: string) {
+  if (key.endsWith(WILD_SUFFIX)) key = key.slice(0, -WILD_SUFFIX.length);
+  const mixed = MIXED.find((p) => p.id === key);
+  if (mixed) return mixed.regions.length;
   const hard = HARD.find((p) => p.id === key);
   if (hard) return hard.regions.length;
   const campaign = CAMPAIGN.find((p) => p.id === key);

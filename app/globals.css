@@ -643,6 +643,61 @@ footer {
   padding: 0 8px;
   font-size: 0.875rem;
 }
+.play-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
+}
+.obstacle-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  color: #526269;
+}
+.obstacle-help svg {
+  width: 16px;
+  height: 16px;
+}
+.cell.blocked-cell {
+  cursor: default;
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 5px,
+    #213b4215 5px 7px
+  );
+}
+.obstacle-icon {
+  width: 52%;
+  height: 52%;
+  color: #314b56;
+  opacity: 0.8;
+}
+.region-quota {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  z-index: 1;
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 3px;
+  color: #233d30;
+  background: #ffffffe8;
+  pointer-events: none;
+}
+.mixed-board .bull-mark {
+  width: 55%;
+  transform: translateY(5px);
+}
+.mixed-board .obstacle-icon {
+  transform: translateY(5px);
+}
 .auto-exclusions-control label {
   display: flex;
   align-items: center;
