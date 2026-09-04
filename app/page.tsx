@@ -28,8 +28,6 @@ import {
   ZoomIn,
   ZoomOut,
   Settings2,
-  Mountain,
-  Waves,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -43,6 +41,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { HomeScreen } from '@/components/home-screen';
+import { WildScreen } from '@/components/wild-screen';
+import { modeEntry, obstacleImage } from '@/lib/mode-entry';
 import { ChapterCards, LevelPicker } from '@/components/chapter-browser';
 import { CHAPTERS, chapterFor, chapterImage } from '@/lib/chapters';
 import { CAMPAIGN } from '@/lib/campaign-data';
@@ -97,7 +97,9 @@ const rulesFor = (s: Selection) =>
       : DEFAULT_MESSAGE;
 
 export default function Home() {
-  const [view, setView] = useState<'home' | 'chapters' | 'play'>('home');
+  const [view, setView] = useState<'home' | 'wild' | 'chapters' | 'play'>(
+    'home',
+  );
   const [progress, setProgress] = useState<Progress>(emptyProgress);
   const [selection, setSelection] = useState<Selection>({
     mode: 'campaign',
@@ -515,30 +517,16 @@ export default function Home() {
               resumeLabel={progress.last ? labelFor(progress.last) : undefined}
               onResume={() => progress.last && openPuzzle(progress.last)}
               onCampaign={() => {
-                if (hydrated) setView('chapters');
+                if (!hydrated) return;
+                setSelection(modeEntry(progress, 'campaign', false));
+                setView('chapters');
               }}
               onEndless={() =>
-                openPuzzle({
-                  mode: 'endless',
-                  obstacles,
-                  level:
-                    progress.last?.mode === 'endless' ? progress.last.level : 0,
-                })
+                openPuzzle(modeEntry(progress, 'endless', false))
               }
-              onHard={() =>
-                openPuzzle({
-                  mode: 'hard',
-                  obstacles,
-                  level: unlockedLevel(progress, 'hard', obstacles),
-                })
-              }
-              onMixed={() =>
-                openPuzzle({
-                  mode: 'mixed',
-                  obstacles,
-                  level: unlockedLevel(progress, 'mixed', obstacles),
-                })
-              }
+              onHard={() => openPuzzle(modeEntry(progress, 'hard', false))}
+              onMixed={() => openPuzzle(modeEntry(progress, 'mixed', false))}
+              onWild={() => hydrated && setView('wild')}
             />
             <div className="save-tools">
               <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
@@ -583,14 +571,30 @@ export default function Home() {
               />
             </div>
           </>
+        ) : view === 'wild' ? (
+          <WildScreen
+            onBack={() => setView('home')}
+            onResume={
+              progress.last?.obstacles
+                ? () => progress.last && openPuzzle(progress.last)
+                : undefined
+            }
+            onStart={(mode) => {
+              const entry = modeEntry(progress, mode, true);
+              if (mode === 'campaign') {
+                setSelection(entry);
+                setView('chapters');
+              } else openPuzzle(entry);
+            }}
+          />
         ) : view === 'chapters' ? (
           <>
             <header className="chapter-page-header">
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="返回主介面"
-                onClick={() => setView('home')}
+                aria-label={obstacles ? '返回荒野牧場' : '返回主介面'}
+                onClick={() => setView(obstacles ? 'wild' : 'home')}
               >
                 <ArrowLeft />
               </Button>
@@ -710,7 +714,7 @@ export default function Home() {
                     </ol>
                     {obstacles && (
                       <p className="rule-note">
-                        池塘與岩石不能放牛，也不需要標記。障礙不會阻隔牛之間的相鄰判定。荒野版與原版分開儲存、解鎖；切換會保留作答。
+                        池塘與岩石不能放牛，也不需要標記。障礙不會阻隔牛之間的相鄰判定。荒野模式獨立儲存、解鎖，不影響原版進度。
                       </p>
                     )}
                     <p className="rule-note">
@@ -789,37 +793,6 @@ export default function Home() {
                 </div>
                 <div className="play-settings">
                   <div className="auto-exclusions-control">
-                    <label htmlFor="wild-obstacles">荒野障礙</label>
-                    <Switch
-                      id="wild-obstacles"
-                      checked={obstacles}
-                      disabled={!hydrated}
-                      onCheckedChange={(enabled) => {
-                        const level =
-                          selection.mode === 'endless'
-                            ? selection.level
-                            : Math.min(
-                                selection.level,
-                                unlockedLevel(
-                                  progress,
-                                  selection.mode,
-                                  enabled,
-                                ),
-                              );
-                        if (
-                          openPuzzle({
-                            ...selection,
-                            level,
-                            obstacles: enabled,
-                          })
-                        )
-                          setMessage(
-                            `${enabled ? '已進入荒野版，池塘與岩石不能放牛' : '已回到原版'}。作答分開保留${level !== selection.level ? '，已前往此版本可挑戰的題目' : ''}。`,
-                          );
-                      }}
-                    />
-                  </div>
-                  <div className="auto-exclusions-control">
                     <label htmlFor="auto-exclusions">自動排除</label>
                     <Switch
                       id="auto-exclusions"
@@ -831,8 +804,20 @@ export default function Home() {
                 </div>
                 {obstacles && (
                   <p className="obstacle-help">
-                    <Waves aria-hidden="true" /> 池塘・
-                    <Mountain aria-hidden="true" /> 岩石：不能放牛
+                    <img
+                      src={obstacleImage('pond')}
+                      alt=""
+                      width="28"
+                      height="28"
+                    />{' '}
+                    池塘・
+                    <img
+                      src={obstacleImage('rocks')}
+                      alt=""
+                      width="28"
+                      height="28"
+                    />{' '}
+                    岩石：不能放牛
                   </p>
                 )}
                 {directPaint && (
@@ -913,18 +898,16 @@ export default function Home() {
                                 ×{puzzle.regionQuotas![region]}
                               </span>
                             )}
-                          {isBlocked &&
-                            (index % 2 ? (
-                              <Mountain
-                                className="obstacle-icon"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <Waves
-                                className="obstacle-icon"
-                                aria-hidden="true"
-                              />
-                            ))}
+                          {isBlocked && (
+                            <img
+                              className="obstacle-sprite"
+                              src={obstacleImage(index % 2 ? 'rocks' : 'pond')}
+                              alt=""
+                              width="128"
+                              height="128"
+                              draggable={false}
+                            />
+                          )}
                           {!isBlocked && state === 1 && (
                             <span
                               className={`note-dot ${isAutomatic ? 'auto-note' : ''}`}
@@ -1023,7 +1006,9 @@ export default function Home() {
                           : setView(
                               selection.mode === 'campaign'
                                 ? 'chapters'
-                                : 'home',
+                                : obstacles
+                                  ? 'wild'
+                                  : 'home',
                             )
                       }
                     >
@@ -1035,7 +1020,9 @@ export default function Home() {
                         : selection.mode === 'campaign'
                           ? '查看完整旅程'
                           : directPaint
-                            ? '返回主介面'
+                            ? obstacles
+                              ? '返回荒野牧場'
+                              : '返回主介面'
                             : '返回旅程'}
                       <ChevronRight />
                     </Button>

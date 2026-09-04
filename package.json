@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
-    "test": "node --experimental-strip-types scripts/verify-game.mjs && node --experimental-strip-types scripts/verify-hard.mjs && node --experimental-strip-types scripts/verify-auto.mjs && node --experimental-strip-types scripts/verify-variants.mjs",
+    "test": "node --experimental-strip-types scripts/verify-game.mjs && node --experimental-strip-types scripts/verify-hard.mjs && node --experimental-strip-types scripts/verify-auto.mjs && node --experimental-strip-types scripts/verify-variants.mjs && node --experimental-strip-types scripts/verify-mode-entry.mjs",
     "format": "oxfmt"
   },
   "dependencies": {
