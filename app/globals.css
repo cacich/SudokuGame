@@ -2,6 +2,39 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
+.home-mode {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  height: auto;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: 15px;
+  font-size: 1.125rem;
+  background: #fffdf7e8;
+  border-color: #bfcbb6;
+  color: #315b3e;
+}
+.home-mode.resume-button {
+  min-height: 58px;
+  background: #315b3e;
+  color: #fffdf7;
+}
+.home-mode.resume-button span {
+  flex: 0 1 auto;
+  text-align: center;
+  font-size: 1.125rem;
+}
+.home-mode svg {
+  width: 21px;
+  height: 21px;
+}
+.home-heading h1 {
+  margin-top: 15px;
+}
+
 @custom-variant dark (&:is(.dark *));
 @theme inline {
   --color-background: var(--background);
@@ -549,6 +582,40 @@ footer {
 }
 .region-8 {
   --cell-color: #eee6ba;
+}
+.region-9 {
+  --cell-color: #e3cbd7;
+}
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.board-toolbar button {
+  min-height: 42px;
+  font-size: 0.875rem;
+}
+.board-toolbar [data-slot='toggle-group-item'][data-pressed] {
+  background: var(--chapter-color);
+  color: white;
+}
+.double-board {
+  overflow: auto;
+  max-height: 65dvh;
+  padding-bottom: 4px;
+  overscroll-behavior: contain;
+}
+.double-board.zoomed .board {
+  width: 560px;
+  max-width: none;
+}
+.double-board:not(.zoomed) {
+  max-height: none;
+}
+.hard-level-grid {
+  padding: 4px;
 }
 .bull-mark {
   width: 72%;

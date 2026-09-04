@@ -1,5 +1,17 @@
 export type CellState = 0 | 1 | 2;
-export type GridPuzzle = { regions: number[][]; solution: number[] };
+import { nextDoubleDeduction, touching, unitsFor } from './double-logic.ts';
+export type GridPuzzle = {
+  regions: number[][];
+  solution: number[] | number[][];
+  cowsPerUnit?: 1 | 2;
+};
+export function solutionCells(puzzle: GridPuzzle) {
+  return puzzle.solution.flatMap((columns, row) =>
+    (Array.isArray(columns) ? columns : [columns]).map(
+      (col) => row * puzzle.regions.length + col,
+    ),
+  );
+}
 export type Deduction = {
   cells: number[];
   value: CellState;
@@ -25,6 +37,19 @@ export function incompatible(puzzle: GridPuzzle, a: number, b: number) {
 export function conflictsFor(puzzle: GridPuzzle, board: CellState[]) {
   const bulls = board.flatMap((v, i) => (v === 2 ? [i] : []));
   const bad = new Set<number>();
+  if (puzzle.cowsPerUnit === 2) {
+    for (let a = 0; a < bulls.length; a++)
+      for (let b = a + 1; b < bulls.length; b++)
+        if (touching(bulls[a], bulls[b], puzzle.regions.length)) {
+          bad.add(bulls[a]);
+          bad.add(bulls[b]);
+        }
+    for (const unit of unitsFor(puzzle)) {
+      const placed = unit.filter((i) => board[i] === 2);
+      if (placed.length > 2) placed.forEach((i) => bad.add(i));
+    }
+    return bad;
+  }
   for (let a = 0; a < bulls.length; a++)
     for (let b = a + 1; b < bulls.length; b++) {
       if (incompatible(puzzle, bulls[a], bulls[b])) {
@@ -38,7 +63,8 @@ export function conflictsFor(puzzle: GridPuzzle, board: CellState[]) {
 export function isSolved(puzzle: GridPuzzle, board: CellState[]) {
   return (
     board.length === puzzle.regions.length ** 2 &&
-    board.filter((v) => v === 2).length === puzzle.regions.length &&
+    board.filter((v) => v === 2).length ===
+      puzzle.regions.length * (puzzle.cowsPerUnit ?? 1) &&
     conflictsFor(puzzle, board).size === 0
   );
 }
@@ -47,6 +73,7 @@ export function nextDeduction(
   puzzle: GridPuzzle,
   board: CellState[],
 ): Deduction | null {
+  if (puzzle.cowsPerUnit === 2) return nextDoubleDeduction(puzzle, board);
   const n = puzzle.regions.length;
   const ids = Array.from({ length: n * n }, (_, i) => i);
   const groups = [

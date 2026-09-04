@@ -1,7 +1,8 @@
 import { CAMPAIGN } from './campaign-data.ts';
+import { HARD } from './hard-data.ts';
 import { isSolved, type CellState, type GridPuzzle } from './logic.ts';
 
-export type Mode = 'campaign' | 'endless';
+export type Mode = 'campaign' | 'endless' | 'hard';
 export type Selection = { mode: Mode; level: number };
 export type Session = { board: CellState[]; elapsed: number; hints: number };
 export type Progress = {
@@ -24,20 +25,23 @@ export const emptyProgress = (): Progress => ({
 export const keyFor = ({ mode, level }: Selection) =>
   mode === 'campaign'
     ? (CAMPAIGN[level]?.id ?? 'invalid')
-    : `endless-${level + 1}`;
+    : mode === 'hard'
+      ? (HARD[level]?.id ?? 'invalid')
+      : `endless-${level + 1}`;
 export const emptySession = (size: number): Session => ({
   board: Array<CellState>(size * size).fill(0),
   elapsed: 0,
   hints: 0,
 });
-export function unlockedLevel(progress: Progress) {
+export function unlockedLevel(
+  progress: Progress,
+  mode: 'campaign' | 'hard' = 'campaign',
+) {
+  const bank = mode === 'hard' ? HARD : CAMPAIGN;
   let next = 0;
-  while (
-    next < CAMPAIGN.length &&
-    progress.completed.includes(CAMPAIGN[next].id)
-  )
+  while (next < bank.length && progress.completed.includes(bank[next].id))
     next++;
-  return Math.min(next, CAMPAIGN.length - 1);
+  return Math.min(next, bank.length - 1);
 }
 export function canOpen(progress: Progress, selection: Selection) {
   return (
@@ -45,8 +49,11 @@ export function canOpen(progress: Progress, selection: Selection) {
     selection.level >= 0 &&
     (selection.mode === 'endless'
       ? selection.level < MAX_ENDLESS
-      : selection.mode === 'campaign' &&
-        selection.level <= unlockedLevel(progress))
+      : selection.mode === 'hard'
+        ? selection.level < HARD.length &&
+          selection.level <= unlockedLevel(progress, 'hard')
+        : selection.mode === 'campaign' &&
+          selection.level <= unlockedLevel(progress))
   );
 }
 export function saveSession(
@@ -74,6 +81,8 @@ export function saveSession(
 const integer = (x: unknown, fallback = 0) =>
   Number.isSafeInteger(x) && Number(x) >= 0 ? Number(x) : fallback;
 function keySize(key: string) {
+  const hard = HARD.find((p) => p.id === key);
+  if (hard) return hard.regions.length;
   const campaign = CAMPAIGN.find((p) => p.id === key);
   if (campaign) return campaign.regions.length;
   const match = /^endless-([1-9]\d*)$/.exec(key);

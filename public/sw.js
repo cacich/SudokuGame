@@ -1,4 +1,4 @@
-const CACHE = 'wildgrid-journey-v2';
+const CACHE = 'wildgrid-double-v3';
 const ROOT = self.registration.scope;
 const ASSETS = [
   ROOT,
